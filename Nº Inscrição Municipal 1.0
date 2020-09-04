@@ -1,0 +1,161 @@
+from qgis.core import QgsProcessing
+from qgis.core import QgsProcessingAlgorithm
+from qgis.core import QgsProcessingMultiStepFeedback
+from qgis.core import QgsProcessingParameterField
+from qgis.core import QgsProcessingParameterVectorLayer
+from qgis.core import QgsProcessingParameterFeatureSink
+import processing
+
+
+class InscMunicipalVs11(QgsProcessingAlgorithm):
+
+    def initAlgorithm(self, config=None):
+        self.addParameter(QgsProcessingParameterVectorLayer('subsetores', 'Sub-Setores', types=[QgsProcessing.TypeVectorAnyGeometry], defaultValue=None))
+        self.addParameter(QgsProcessingParameterVectorLayer('quadra', 'Quadra', types=[QgsProcessing.TypeVectorLine], defaultValue=None))
+        self.addParameter(QgsProcessingParameterVectorLayer('numerodequadras', 'Numero de Quadras', types=[QgsProcessing.TypeVectorPoint], defaultValue=None))
+        self.addParameter(QgsProcessingParameterField('camposdondequadrasaseremmantidosdeixeembrancoparamantertodososcampos', 'Campos do nº de quadras a serem mantidos (deixe em branco para manter todos os campos)', type=QgsProcessingParameterField.Any, parentLayerParameterName='numerodequadras', allowMultiple=False, defaultValue=None))
+        self.addParameter(QgsProcessingParameterVectorLayer('lote', 'Lote', types=[QgsProcessing.TypeVectorAnyGeometry], defaultValue=None))
+        self.addParameter(QgsProcessingParameterField('camposdoslotesaseremmantidosdeixeembrancoparamantertodososcampos', 'Campos dos Lotes a serem mantidos (deixe em branco para manter todos os campos)', optional=True, type=QgsProcessingParameterField.Any, parentLayerParameterName='lote', allowMultiple=True, defaultValue=None))
+        self.addParameter(QgsProcessingParameterFeatureSink('Lotes', 'Lotes', type=QgsProcessing.TypeVectorAnyGeometry, createByDefault=True, defaultValue=None))
+
+        
+    def processAlgorithm(self, parameters, context, model_feedback):
+        # Use a multi-step feedback, so that individual child algorithm progress reports are adjusted for the
+        # overall progress through the model
+        feedback = QgsProcessingMultiStepFeedback(7, model_feedback)
+        results = {}
+        outputs = {}
+
+        # Editar campos
+        alg_params = {
+            'FIELDS_MAPPING': [{'expression': 'left("id",1)', 'length': 5, 'name': 'Distrito', 'precision': 0, 'type': 2}, {'expression': 'right("id",2)\r\n', 'length': 5, 'name': 'Setor', 'precision': 0, 'type': 2}],
+            'INPUT': parameters['subsetores'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['EditarCampos'] = processing.run('qgis:refactorfields', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(1)
+        if feedback.isCanceled():
+            return {}
+
+        # Interseção
+        alg_params = {
+            'INPUT': parameters['lote'],
+            'INPUT_FIELDS': parameters['camposdoslotesaseremmantidosdeixeembrancoparamantertodososcampos'],
+            'OVERLAY': outputs['EditarCampos']['OUTPUT'],
+            'OVERLAY_FIELDS': None,
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['Interseo'] = processing.run('qgis:intersection', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(2)
+        if feedback.isCanceled():
+            return {}
+
+        # Linhas para polígonos
+        alg_params = {
+            'INPUT': parameters['quadra'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['LinhasParaPolgonos'] = processing.run('qgis:linestopolygons', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(3)
+        if feedback.isCanceled():
+            return {}
+
+        # Unir atributos pela posição
+        alg_params = {
+            'DISCARD_NONMATCHING': True,
+            'INPUT': outputs['LinhasParaPolgonos']['OUTPUT'],
+            'JOIN': parameters['numerodequadras'],
+            'JOIN_FIELDS': parameters['camposdondequadrasaseremmantidosdeixeembrancoparamantertodososcampos'],
+            'METHOD': 0,
+            'PREDICATE': [0,3,4],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['UnirAtributosPelaPosio'] = processing.run('qgis:joinattributesbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(4)
+        if feedback.isCanceled():
+            return {}
+
+        # Unir atributos pela posição
+        alg_params = {
+            'DISCARD_NONMATCHING': True,
+            'INPUT': outputs['Interseo']['OUTPUT'],
+            'JOIN': outputs['UnirAtributosPelaPosio']['OUTPUT'],
+            'JOIN_FIELDS': None,
+            'METHOD': 0,
+            'PREDICATE': [0,3,4],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['UnirAtributosPelaPosio'] = processing.run('qgis:joinattributesbylocation', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(5)
+        if feedback.isCanceled():
+            return {}
+
+        # Editar campos
+        alg_params = {
+            'FIELDS_MAPPING': [{'expression': '"Distrito"', 'length': 5, 'name': 'Distrito', 'precision': 0, 'type': 10}, {'expression': '"Setor"', 'length': 5, 'name': 'Setor', 'precision': 0, 'type': 10}, {'expression': '"text"', 'length': 10, 'name': 'Quadra', 'precision': 0, 'type': 10}, {'expression': '"Face"', 'length': 9, 'name': 'Face', 'precision': 0, 'type': 2}, {'expression': '"Lote"', 'length': 9, 'name': 'Lote', 'precision': 0, 'type': 2}, {'expression': '"Vila"', 'length': 9, 'name': 'Vila', 'precision': 0, 'type': 2}],
+            'INPUT': outputs['UnirAtributosPelaPosio']['OUTPUT'],
+            'OUTPUT': QgsProcessing.TEMPORARY_OUTPUT
+        }
+        outputs['EditarCampos'] = processing.run('qgis:refactorfields', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+
+        feedback.setCurrentStep(6)
+        if feedback.isCanceled():
+            return {}
+
+        # Calculadora de campo
+        alg_params = {
+            'FIELD_LENGTH': 20,
+            'FIELD_NAME': 'Insc. Municipal',
+            'FIELD_PRECISION': 3,
+            'FIELD_TYPE': 2,
+            'FORMULA': 'concat(\"Distrito\",\"Setor\",\"Quadra\",\"Face\",\"Lote\",\"Vila\")',
+            'INPUT': outputs['EditarCampos']['OUTPUT'],
+            'NEW_FIELD': True,
+            'OUTPUT': parameters['Lotes']
+        }
+        outputs['CalculadoraDeCampo'] = processing.run('qgis:fieldcalculator', alg_params, context=context, feedback=feedback, is_child_algorithm=True)
+        results['Lotes'] = outputs['CalculadoraDeCampo']['OUTPUT']
+        return results
+
+    def name(self):
+        return 'Insc. Municipal. Vs 1.1'
+
+    def displayName(self):
+        return 'Insc. Municipal. Vs 1.1'
+
+    def group(self):
+        return 'Ferramentas'
+
+    def groupId(self):
+        return 'Ferramentas'
+
+    def shortHelpString(self):
+        return """<html><body><h2>Descrição do algoritmo</h2>
+<p>Esta ferramenta calcula o número de inscrição municipal.</p>
+<h2>parâmetros de entrada</h2>
+<h3>Campos do nº de quadras a serem mantidos (deixe em branco para manter todos os campos)</h3>
+<p></p>
+<h3>Campos dos Lotes a serem mantidos (deixe em branco para manter todos os campos)</h3>
+<p></p>
+<h3>Lote</h3>
+<p></p>
+<h3>Numero de Quadras</h3>
+<p></p>
+<h3>Quadra</h3>
+<p></p>
+<h3>Sub-Setores</h3>
+<p></p>
+<h3>Lotes</h3>
+<p></p>
+<h2>Saídas</h2>
+<h3>Lotes</h3>
+<p></p>
+<br><p align="right">Autor do algoritmo: Charlene Albuquerque de Souza</p><p align="right">Autor da ajuda: Charlene Albuquerque de Souza</p><p align="right">Versão do Algoritmo: Versão 1.1</p></body></html>"""
+
+    def createInstance(self):
+        return InscMunicipalVs11()
