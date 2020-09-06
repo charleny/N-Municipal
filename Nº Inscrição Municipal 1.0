@@ -138,24 +138,21 @@ class InscMunicipalVs11(QgsProcessingAlgorithm):
         return """<html><body><h2>Descrição do algoritmo</h2>
 <p>Esta ferramenta calcula o número de inscrição municipal.</p>
 <h2>parâmetros de entrada</h2>
-<h3>Campos do nº de quadras a serem mantidos (deixe em branco para manter todos os campos)</h3>
+<h3> O Campo do nº de quadras, este campo deve ser pontual, onde contém o númetos das quadras</h3>
 <p></p>
-<h3>Campos dos Lotes a serem mantidos (deixe em branco para manter todos os campos)</h3>
+<h3>Os Campos do Lotes a serem mantidos, são as informações que contém sobre o lote, ou dados como Vila e Unidade.</h3>
 <p></p>
-<h3>Lote</h3>
+<h3>A Camada Lote não precisa está validado, a validação poderá ser realizada depois da excrução final.</h3>
 <p></p>
-<h3>Numero de Quadras</h3>
+<h3>Número de Quadras</h3>
 <p></p>
-<h3>Quadra</h3>
+<h3> A camada Quadra para esta ferramenta deve ser linear</h3>
 <p></p>
-<h3>Sub-Setores</h3>
+<h3> A camada de Sub-Setores deve ser Poligonal</h3>
 <p></p>
-<h3>Lotes</h3>
-<p></p>
-<h2>Saídas</h2>
-<h3>Lotes</h3>
-<p></p>
+<h2>Os Lotes são as saídas são resultados do processamento de todos os procediemtos</h2>
 <br><p align="right">Autor do algoritmo: Charlene Albuquerque de Souza</p><p align="right">Autor da ajuda: Charlene Albuquerque de Souza</p><p align="right">Versão do Algoritmo: Versão 1.1</p></body></html>"""
 
+ 
     def createInstance(self):
         return InscMunicipalVs11()
